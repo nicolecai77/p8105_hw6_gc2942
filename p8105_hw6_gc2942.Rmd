@@ -1,11 +1,12 @@
 ---
-title: "Linear Regression"
+title: "P8105_HW6"
 output: github_document
 ---
 
 ```{r setup,include=FALSE}
 library(tidyverse)
 library(modelr)
+library(mgcv)
 knitr::opts_chunk$set(
   fig.width = 6,
   fig.asp =0.6,
@@ -25,7 +26,9 @@ scale_fill_discrete = scale_fill_viridis_d
 ```
 
 ## Problem 1
-```{r,warning=FALSE}
+
+Import the data and clean the data by checking missing data and convert numeric variables into factor.
+```{r,message=FALSE,warning=FALSE}
 birth_w = read_csv("./birthweight.csv") %>% 
   janitor::clean_names() %>% 
   mutate(
@@ -40,45 +43,70 @@ birth_w = read_csv("./birthweight.csv") %>%
   na.omit()
 ```
 
+**Propose a regression model for birth weight and make a plot of model residuals against fitted values.**
+
+I am interested in examining the linear association between baby's length at birth and baby's birth weight. Thus, I use `lm` function begins with the formula specification. The predictor is baby's length at birth and the outcome is baby's birth weight. Then I tidy up my result.I also make a plot for residual against predict value based on my proposed model.
+According to the graph below, we can see that the residuals are around 0.
 ```{r}
-rl = lm(bwt~blength,data = birth_w)
-
-birth_w %>% 
-  modelr::add_predictions(rl) %>% 
-  ggplot(aes(x = pred, y = bwt)) + geom_point()+
-  labs(
-     x="Predicted Values",
-     y="Actual Values",
-     title =" Predicted vs. Actual Values")
-
-
-birth_w %>% 
-  modelr::add_residuals(rl) %>% 
-  ggplot(aes(x = blength, y = resid)) + geom_point()
+rl = lm(bwt ~ blength,data = birth_w) 
+      
+rl %>% 
+    broom::tidy() %>% 
+    select(term, estimate, p.value) %>% 
+    mutate(term = str_replace(term, "blength", "Birth_Length")) %>% 
+    knitr::kable(digits = 3)
+  
+birth_w%>% 
+    modelr::add_predictions(rl) %>% 
+    modelr::add_residuals(rl) %>% 
+    ggplot(aes(x=resid,y=pred))+ 
+    geom_point()+
+    labs(
+     x="Residual",
+     y="Predicted Values",
+     title =" Residual vs. Predicted Values")
 ```
 
-#### using length at birth and gestational age as predictors
+
+#### Compare the models
+
+Model_1 uses length at birth as predictor.
+Model_2 uses length at birth and gestational age as predictors.
+Model_3 uses head circumference, length, sex, and all interactions (including the three-way interaction) between these.
 ```{r}
-fit = lm(bwt ~ blength + gaweeks, data = birth_w)
-fit %>% 
-  broom::tidy()
+bw_df = 
+  crossv_mc(birth_w, 100) %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)) %>% 
+ mutate(
+    mod_1 = map(train, ~lm(bwt ~ blength, data = .x)),
+    mod_2   = map(train, ~lm(bwt ~ blength+gaweeks, data = .x)),
+    mod_3  = map(train, ~lm( bwt~ blength*babysex+bhead*babysex+bhead*blength+bhead*babysex*blength, data = .x))) %>% 
+  mutate(
+    rmse_1 = map2_dbl(mod_1, test, ~rmse(model = .x, data = .y)),
+    rmse_2 = map2_dbl(mod_2, test, ~rmse(model = .x, data = .y)),
+    rmse_3 = map2_dbl(mod_3, test, ~rmse(model = .x, data = .y)))
 
-birth_w %>% 
-  modelr::add_residuals(fit) %>% 
-  ggplot(aes(x=blength,y=resid))+
-  geom_point()
-
-
-birth_w %>% 
-  modelr::add_residuals(fit) %>% 
-  ggplot(aes(x=gaweeks,y=resid))+
-  geom_point()+
-  facet_wrap(.~blength)
+bw_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) +
+  geom_violin()+
+  labs(
+    title = "Comparing Prediction Error Across Models",
+    x = "Models",
+    y = "RMSE")
 ```
 
 
 ## Problem 2
-```{r}
+```{r,message=FALSE}
 weather_df = 
   rnoaa::meteo_pull_monitors(
     c("USW00094728"),
