@@ -105,7 +105,8 @@ bw_df %>%
     x = "Models",
     y = "RMSE")
 ```
-The plot above shows the distribution of RMSE values for each candidate model.I think the model 3 will be the best compate to model 1 and model 2.
+The plot above shows the distribution of RMSE values for each candidate model.I think the model 3 will be the best compare to model 1 and model 2.
+
 ## Problem 2
 ```{r,message=FALSE}
 weather_df = 
