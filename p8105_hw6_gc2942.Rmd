@@ -23,6 +23,8 @@ options(
 scale_colour_discrete = scale_colour_viridis_d
 scale_fill_discrete = scale_fill_viridis_d
 
+set.seed(1)
+
 ```
 
 ## Problem 1
@@ -103,8 +105,7 @@ bw_df %>%
     x = "Models",
     y = "RMSE")
 ```
-
-
+The plot above shows the distribution of RMSE values for each candidate model.I think the model 3 will be the best compate to model 1 and model 2.
 ## Problem 2
 ```{r,message=FALSE}
 weather_df = 
@@ -119,5 +120,73 @@ weather_df =
     tmax = tmax / 10) %>%
   select(name, id, everything())
 ```
+
+I produce 5000 bootstrap samples by using a simple linear regression with tmax as the response and tmin as the predictor, and am interested in the distribution of two quantities estimated from these data. 
+```{r}
+bs_sample=weather_df %>% 
+  drop_na() %>% 
+  bootstrap(5000,id="strap_number") %>% 
+  mutate(models=map(.x=strap,~lm(tmax~tmin,data=.x)))
+
+estimate_1=bs_sample %>% 
+  mutate(r_square=map(models,broom::glance))%>% 
+  select(strap_number, r_square) %>% 
+  unnest(r_square) %>% 
+  select(strap_number,r.squared)
+estimate_1
+
+estimate_1 %>% 
+    ggplot(aes(x = r.squared)) + geom_density()+
+    labs(
+     x="rsquared",
+     title =" the distibution of R squared")
+```
+
+The distribution of estimate r-squared is normally distributed and mean is approximately equal to median in the 5000 bootstrap sample.
+```{r}
+estimate_2=bs_sample %>%
+  mutate(estimate=map(models,broom::tidy)) %>% 
+  select(strap_number,estimate) %>% 
+  unnest(estimate) %>% 
+  select(strap_number,term,estimate) %>% 
+  pivot_wider(
+    names_from = term,
+    values_from=estimate
+  ) %>% 
+  rename(beta_1=tmin,
+         beta_0="(Intercept)") %>% 
+  mutate(log=log(beta_0*beta_1))
+
+estimate_2
+
+estimate_2 %>% 
+  ggplot(aes(x = log)) + geom_density()+
+    labs(
+     x="log(beta0*beta1)",
+     title =" the distibution of log(beta0*beta1)")
+```
+The distribution of estimate log(beta0*beta1) is normally distributed and mean is approximately equal to median in the 5000 bootstrap sample.
+```{r}
+estimate_1%>% 
+  summarize(
+    ci_lower=quantile(r.squared,0.025),
+    ci_upper=quantile(r.squared,0.975)
+  )
+```
+We are 95% confident that the true estimate of rsquare is fall between 0.894 and  0.927 .
+```{r}
+estimate_2%>% 
+  summarize(
+    ci_lower=quantile(log,0.025),
+    ci_upper=quantile(log,0.975)
+  )
+```
+We are 95% confident that the true estimate of log(beta0*beta1) is fall between 1.97 and 2.06 .
+
+
+
+
+
+
 
  
